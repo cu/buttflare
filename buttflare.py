@@ -11,34 +11,55 @@ config = Config()
 cf = CloudFlare(config.email, config.api_key)
 zone = Zone(cf, config.zone_name)
 
-if config.v4_host:
-    v4_fqdn = '.'.join((config.v4_host, config.zone_name))
-    # fetch address from ipv4.bityard.net
-    actual_v4_addr = requests.get(config.v4_check_url).text
+def set_record(addr_type):
+    if addr_type == 'v4':
+        host = config.v4_host
+        check_url = config.v4_check_url
+        record_type = 'A'
+    elif addr_type == 'v6':
+        host = config.v6_host
+        check_url = config.v6_check_url
+        record_type = 'AAAA'
+    else:
+        raise ValueError("arg 1 to addr_type() must be 'v4' or 'v6'")
+
+    fqdn = '.'.join((host, config.zone_name))
+    # fetch actual address
+    actual_addr = requests.get(check_url).text.strip()
     # fetch current record from cloudflare
-    cf_v4_result = zone.get_dns_records(type='A', name=v4_fqdn)
+    cf_result = zone.get_dns_records(type=record_type, name=fqdn)
     # if there's no record in cloudflare, create one
-    if not cf_v4_result:
+    if not cf_result:
         try:
-            zone.create_dns_record('A', config.v4_host, actual_v4_addr)
+            zone.create_dns_record(record_type, host, actual_addr)
         except CfApiError as e:
             print(e.msg, file=sys.stderr)
             print(e.errors, file=sys.stderr)
             sys.exit(1)
         else:
-            print('Record created: {} A {}'.format(v4_fqdn, actual_v4_addr))
-            sys.exit()
-    cf_v4_addr = cf_v4_result[0]['content']
+            print('Record created: {} {} {}'.format(fqdn, record_type,
+                actual_addr))
+            return
+    cf_addr = cf_result[0]['content']
     # if actual and cloudflare don't agree, update cloudflare
-    if actual_v4_addr != cf_v4_addr:
-        cf_v4_id = cf_v4_result[0]['id']
+    if actual_addr != cf_addr:
+        cf_id = cf_result[0]['id']
         try:
-            zone.update_dns_record(cf_v4_id, 'A', config.v4_host,
-                actual_v4_addr)
+            zone.update_dns_record(cf_id, record_type, host, actual_addr)
         except CfApiError as e:
             print(e.msg, file=sys.stderr)
             print(e.errors, file=sys.stderr)
             sys.exit(1)
         else:
-            print('Record updated: {} A {}'.format(v4_fqdn, actual_v4_addr))
-            sys.exit()
+            print('Record updated: {} {} {}'.format(fqdn, record_type,
+                actual_addr))
+            return
+
+
+if config.v4_host:
+    set_record('v4')
+if config.v6_host:
+    set_record('v6')
+if not (config.v4_host or config.v6_host):
+    print('No ddns config found.', file=sys.stderr)
+    sys.exit(1)
