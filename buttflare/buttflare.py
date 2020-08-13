@@ -3,8 +3,8 @@
 import requests
 import sys
 
-from api import CfApiError, CloudFlare, Zone
-from config import Config
+from buttflare.api import CfApiError, CloudFlare, Zone
+from buttflare.config import Config
 
 config = Config()
 
@@ -56,10 +56,14 @@ def set_record(addr_type):
             return
 
 
-if config.v4_host:
-    set_record('v4')
-if config.v6_host:
-    set_record('v6')
-if not (config.v4_host or config.v6_host):
-    print('No ddns config found.', file=sys.stderr)
-    sys.exit(1)
+def main():
+    if config.v4_host:
+        set_record('v4')
+    if config.v6_host:
+        set_record('v6')
+    if not (config.v4_host or config.v6_host):
+        print('No ddns config found.', file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == '__main__':
+    main()
