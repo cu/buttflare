@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
 
+# todo: allow for multiple IP lookup endpoints with retry
+# - http://ipv4.icanhazip.com
+# - https://www.ipify.org/
+# - https://seeip.org/
+
+# Also test with https
+
 import requests
 import sys
 
