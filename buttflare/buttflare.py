@@ -2,7 +2,9 @@
 
 import ipaddress
 import random
+import socket
 import sys
+import requests.packages.urllib3.util.connection as urllib3_cn
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -16,7 +18,7 @@ config = Config()
 cf = CloudFlare(config.email, config.api_key)
 zone = Zone(cf, config.zone_name)
 
-def get_actual_addr(check_urls):
+def get_actual_addr(family, expected_type, check_urls):
     """
     Returns a string containing the actual public IP address of the host,
     or throws an exception if all attempts to look up the IP have failed.
@@ -33,6 +35,8 @@ def get_actual_addr(check_urls):
 
     actual_addr = None
 
+    urllib3_cn.allowed_gai_family = family
+
     for url in urls:
         #print(f'trying {url}')
         http = requests.Session()
@@ -46,28 +50,32 @@ def get_actual_addr(check_urls):
             actual_addr = ipaddress.ip_address(response.text.strip())
         except ValueError:
             continue
-        if actual_addr:
+        if actual_addr and type(actual_addr) == expected_type:
             #print(f"got: {actual_addr} from {url}")
             return str(actual_addr)
 
     if actual_addr is None:
-        raise RuntimeError('Could not look up IP')
+        raise RuntimeError(f'Could not look up IP from any of: {urls}')
 
 def set_record(addr_type):
     if addr_type == 'v4':
         host = config.v4_host
         check_urls = config.v4_check_urls
         record_type = 'A'
+        family = lambda: socket.AF_INET
+        expected_type = ipaddress.IPv4Address
     elif addr_type == 'v6':
         host = config.v6_host
         check_urls = config.v6_check_urls
         record_type = 'AAAA'
+        family = lambda: socket.AF_INET6
+        expected_type = ipaddress.IPv6Address
     else:
         raise ValueError("arg 1 to addr_type() must be 'v4' or 'v6'")
 
     fqdn = '.'.join((host, config.zone_name))
     # fetch actual address
-    actual_addr = get_actual_addr(check_urls)
+    actual_addr = get_actual_addr(family, expected_type, check_urls)
     # fetch current record from cloudflare
     cf_result = zone.get_dns_records(type=record_type, name=fqdn)
     # if there's no record in cloudflare, create one
